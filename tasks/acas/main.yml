@@ -139,15 +139,22 @@
   when: acas_authstrategy != "ldap"
   tags: 
     - template
-- name: Clone {{ acas_client_gitrepo }} to {{ acas_install_directory }}/acas_client
+- name: Clone {{ acas_client_gitrepo }} to {{ acas_install_directory }}/acas_client (without submodules)
   git:
     repo: "{{ acas_client_gitrepo }}"
     dest: "{{ acas_install_directory }}/acas_client"
     version: "{{ acas_client_gitrevision }}"
     accept_hostkey: yes
-    key_file: /home/acas/.ssh/acas_custom_deploykey
+    key_file: /home/acas/.ssh/acas_client-deployment-key
     force: yes
     update: yes
+    recursive: no
+  become_user: acas
+  when: install_acas_client
+- name: Update submodules for acas_client with different key
+  shell: |
+    cd {{ acas_install_directory }}/acas_client
+    GIT_SSH_COMMAND="ssh -i /home/acas/.ssh/acas_custom_deploykey -o StrictHostKeyChecking=no" git submodule update --init --recursive
   become_user: acas
   when: install_acas_client
 - name: Run template on acas_client credential file
@@ -368,7 +375,7 @@
 #   tags:
 #     - restore-acas
 #   when: restore is defined
-- name: Run database restore with {{ restore }}
+- name: Run database restore with backup
   shell: |
     /usr/local/bin/docker-compose exec backup ./backup.sh restore {{ restore }}
   args:
@@ -387,17 +394,37 @@
 #   pause:
 #     minutes: 2
 #   when: restore is not defined
-- name: Restart services
+- name: Restart services with acas_startup.sh
   ansible.builtin.shell:
     cmd: ./acas_startup.sh &
     chdir: "{{ acas_install_directory }}/acas_custom"
   become: yes
   become_user: acas
   tags:
-    # - start-acas
+    - start-acas
     - restore-acas
     - update-certs
   when: restore is defined
+
+- name: Start services with acas_startup.sh (normal deployment)
+  ansible.builtin.shell:
+    cmd: |
+      echo "Starting ACAS services at $(date)"
+      ls -la acas_startup.sh
+      ./acas_startup.sh
+      echo "ACAS startup script completed at $(date)"
+    chdir: "{{ acas_install_directory }}/acas_custom"
+  become: yes
+  become_user: acas
+  register: startup_result
+  tags:
+    - start-acas
+  when: restore is not defined
+
+- name: Show startup script output
+  debug:
+    var: startup_result.stdout_lines
+  when: restore is not defined
 
 # - name: Configure postgres ssl users
 #   postgresql_pg_hba:
