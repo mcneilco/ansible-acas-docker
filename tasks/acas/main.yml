@@ -139,6 +139,14 @@
   when: acas_authstrategy != "ldap"
   tags: 
     - template
+- name: Create acas_client directory with proper permissions
+  file:
+    path: "{{ acas_install_directory }}/acas_client"
+    state: directory
+    group: "{{ run_group }}"
+    owner: "{{ run_user }}"
+    mode: 0755
+  when: install_acas_client
 - name: Clone {{ acas_client_gitrepo }} to {{ acas_install_directory }}/acas_client (without submodules)
   git:
     repo: "{{ acas_client_gitrepo }}"
@@ -338,14 +346,15 @@
   when: docker_compose_info.services.certs is defined
   tags:
     - update-certs
-- name: Run docker compose up
-  ansible.builtin.shell:
-    cmd: ./acas_startup.sh &
-    chdir: "{{ acas_install_directory }}/acas_custom"
-  become: yes
-  become_user: acas
-  tags: 
-    - start-acas
+# I always do manual restores - commenting this out, it's dangerous
+# - name: Run docker compose up
+#   ansible.builtin.shell:
+#     cmd: ./acas_startup.sh &
+#     chdir: "{{ acas_install_directory }}/acas_custom"
+#   become: yes
+#   become_user: acas
+#   tags: 
+#     - start-acas
 # remove below because we don;t know state of sdf-preprocessor or lr-export. These may not be running and could be affected/
 # - name: Docker prune everything (including non-dangling images)
 #   ansible.builtin.shell:
@@ -360,12 +369,12 @@
 #     builder_cache: yes
   # become: yes
   # become_user: acas
-- name: Pause for 2 minutes
-  pause:
-    minutes: 2
-  tags:
-    - restore-acas
-  when: restore is defined
+# - name: Pause for 2 minutes
+#   pause:
+#     minutes: 2
+#   tags:
+#     - restore-acas
+#   when: restore is defined
 # - name: Restart services
 #   ansible.builtin.shell:
 #     cmd: ./acas_startup.sh &
@@ -375,36 +384,36 @@
 #   tags:
 #     - restore-acas
 #   when: restore is defined
-- name: Run database restore with backup
-  shell: |
-    /usr/local/bin/docker-compose exec backup ./backup.sh restore {{ restore }}
-  args:
-    chdir: "{{ acas_install_directory }}/acas_custom"
-  become: yes
-  become_user: acas
-  when: restore is defined
-  register: restore_result
-  tags:
-    - restore-acas
-- debug: msg="{{ restore_result.stdout.split('\n')[:-1] }}"
-  when: restore is defined
-  tags:
-    - restore-acas
+# - name: Run database restore with backup
+#   shell: |
+#     /usr/local/bin/docker-compose exec backup ./backup.sh restore {{ restore }}
+#   args:
+#     chdir: "{{ acas_install_directory }}/acas_custom"
+#   become: yes
+#   become_user: acas
+#   when: restore is defined
+#   register: restore_result
+#   tags:
+#     - restore-acas
+# - debug: msg="{{ restore_result.stdout.split('\n')[:-1] }}"
+#   when: restore is defined
+#   tags:
+#     - restore-acas
 # - name: Pause for 2 minutes
 #   pause:
 #     minutes: 2
 #   when: restore is not defined
-- name: Restart services with acas_startup.sh
-  ansible.builtin.shell:
-    cmd: ./acas_startup.sh &
-    chdir: "{{ acas_install_directory }}/acas_custom"
-  become: yes
-  become_user: acas
-  tags:
-    - start-acas
-    - restore-acas
-    - update-certs
-  when: restore is defined
+# - name: Restart services with acas_startup.sh
+#   ansible.builtin.shell:
+#     cmd: ./acas_startup.sh &
+#     chdir: "{{ acas_install_directory }}/acas_custom"
+#   become: yes
+#   become_user: acas
+#   tags:
+#     - start-acas
+#     - restore-acas
+#     - update-certs
+#   when: restore is defined
 
 - name: Start services with acas_startup.sh (normal deployment)
   ansible.builtin.shell:
